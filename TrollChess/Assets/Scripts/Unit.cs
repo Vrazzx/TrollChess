@@ -32,8 +32,10 @@ public class Unit : MonoBehaviour
 {
     public UnitData data; // ScriptableObject с базовыми параметрами
     public UnitStats stats;
-    public Node currentNode;
     public UnitState currentState = UnitState.Idle;
+    public Node currentNode;      // где сейчас стоит
+    private Node targetNode;      // узел, к которому идёт
+    private bool isMoving = false;  
 
     public float mana = 0f;
     public float maxMana = 100f;
@@ -68,7 +70,14 @@ public class Unit : MonoBehaviour
     {
         if (currentState == UnitState.Dead) return;
 
-        // Определяем список врагов
+        // Если движется — не решаем логику, только интерполяция
+        if (isMoving)
+        {
+            MoveToTargetNode();
+            return;
+        }
+
+        // Иначе — решаем, что делать
         List<Unit> enemies = IsPlayer 
             ? UnitManager.Instance.enemyUnits 
             : UnitManager.Instance.playerUnits;
@@ -79,49 +88,34 @@ public class Unit : MonoBehaviour
             return;
         }
 
-        // Находим ближайшего живого врага
-        Unit target = null;
-        float minDist = float.MaxValue;
-        Vector3 myPos = transform.position;
-
-        foreach (Unit enemy in enemies)
-        {
-            if (enemy == null || enemy.currentState == UnitState.Dead) continue;
-            float dist = Vector3.Distance(myPos, enemy.transform.position);
-            if (dist < minDist)
-            {
-                minDist = dist;
-                target = enemy;
-            }
-        }
-
-        if (target == null)
+        Unit target = FindClosestEnemy(enemies);
+        if (target == null || target.currentState == UnitState.Dead)
         {
             currentState = UnitState.Idle;
             return;
         }
 
-        // Проверяем дистанцию до атаки
-        if (minDist <= attackRange)
+        // Проверяем: цель в соседнем узле?
+        bool canAttack = false;
+        if (currentNode != null && target.currentNode != null)
+        {
+            List<Node> neighbors = GridManager.Instance.GetNeighbors(currentNode);
+            canAttack = neighbors.Contains(target.currentNode);
+        }
+
+        if (canAttack)
         {
             if (Time.time >= lastAttackTime + 1f / stats.attackSpeed)
             {
-                // Атака
-                target.TakeDamage(stats.damage);
-                GainMana(manaGainPerHit);
+                Attack(target);
                 lastAttackTime = Time.time;
                 currentState = UnitState.Attacking;
             }
         }
         else
         {
-            // Движение к цели (упрощённое)
-            transform.position = Vector3.MoveTowards(
-                transform.position,
-                target.transform.position,
-                3f * Time.deltaTime
-            );
-            currentState = UnitState.Moving;
+            // Выбрать следующий узел к цели
+            PlanNextMove(target);
         }
     }
 
@@ -151,6 +145,37 @@ public class Unit : MonoBehaviour
             // Вызов ульты через корутину или событие
         }
     }
+    private void PlanNextMove(Unit target)
+    {
+        if (currentNode == null || target.currentNode == null) return;
+
+        List<Node> neighbors = GridManager.Instance.GetNeighbors(currentNode);
+        Node bestNext = null;
+        float minDist = float.MaxValue;
+
+        foreach (Node neighbor in neighbors)
+        {
+            if (!neighbor.IsOccupied)
+            {
+                float dist = Vector3.Distance(neighbor.worldPosition, target.currentNode.worldPosition);
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                    bestNext = neighbor;
+                }
+            }
+        }
+
+        if (bestNext != null)
+        {
+            // Занимаем целевой узел заранее (чтобы никто не занял)
+            bestNext.SetOccupied(true);
+            // Освобождаем текущий (позже, при завершении движения)
+            targetNode = bestNext;
+            isMoving = true;
+            currentState = UnitState.Moving;
+        }
+    }
 
     private void Update()
     {
@@ -160,8 +185,57 @@ public class Unit : MonoBehaviour
         }
     }
 
-    
+    private void MoveToTargetNode()
+    {
+        if (targetNode == null) return;
+
+        // Плавно движемся к центру узла
+        transform.position = Vector3.MoveTowards(transform.position, targetNode.worldPosition, 3f * Time.deltaTime);
+
+        // Как только достигли — фиксируем позицию и завершаем движение
+        if (Vector3.Distance(transform.position, targetNode.worldPosition) < 0.05f)
+        {
+            transform.position = targetNode.worldPosition; // точно в центре!
+
+            // Освобождаем старый узел
+            if (currentNode != null)
+                currentNode.SetOccupied(false);
+
+            // Обновляем текущий узел
+            currentNode = targetNode;
+            targetNode = null;
+            isMoving = false;
+        }
+    }
+    private Unit FindClosestEnemy(List<Unit> enemies)
+    {
+        Unit closest = null;
+        float minDist = float.MaxValue;
+        Vector3 myPos = transform.position;
+
+        foreach (Unit enemy in enemies)
+        {
+            if (enemy == null || enemy.currentState == UnitState.Dead) continue;
+            float dist = Vector3.Distance(myPos, enemy.transform.position);
+            if (dist < minDist)
+            {
+                minDist = dist;
+                closest = enemy;
+            }
+        }
+        return closest;
+    }
+
+    private void Attack(Unit target)
+    {
+        if (target == null) return;
+        target.TakeDamage(stats.damage);
+        GainMana(manaGainPerHit);
+    }
+
+
 }
+
 
 public enum UnitState
 {

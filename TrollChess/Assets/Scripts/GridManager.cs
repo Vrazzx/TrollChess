@@ -16,6 +16,10 @@ public class GridManager : Manager<GridManager>
     private bool uiGridCreated = false; // ← ДОБАВЛЕНО: флаг, чтобы не создавать дважды
     private Dictionary<Vector3, Node> positionToNode = new Dictionary<Vector3, Node>();
     public List<Node> AllNodes => graph?.nodes;
+    public List<Node> GetNeighbors(Node node)
+    {
+        return graph?.Neighbors(node) ?? new List<Node>();
+    }
 
 
     Graph graph;

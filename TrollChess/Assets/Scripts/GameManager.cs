@@ -69,11 +69,19 @@ public class GameManager : Manager<GameManager>
     {
         currentPhase = GamePhase.Preparation;
         phaseTimer = 0f;
-        UnitManager.Instance.ClearAllUnits();
 
-        RefreshShop();          // Обновить магазин
-        SpawnEnemyWave(round);  // Спавн врагов
+        // ❌ УДАЛИТЬ: UnitManager.Instance.ClearAllUnits();
 
+        // ✅ Удаляем ТОЛЬКО врагов
+        foreach (var enemy in UnitManager.Instance.enemyUnits.ToArray())
+        {
+            UnitManager.Instance.OnUnitDied(enemy); // освобождает узел
+        }
+        
+        // Ваши юниты остаются на поле!
+
+        RefreshShop();
+        SpawnEnemyWave(round);
         UIManager.Instance?.UpdateRound($"Round {round} - PREPARE");
     }
 

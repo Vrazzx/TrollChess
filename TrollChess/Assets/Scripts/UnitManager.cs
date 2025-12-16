@@ -8,38 +8,39 @@ public class UnitManager : Manager<UnitManager>
 
     public void SpawnUnit(UnitData data, Node node, bool isPlayer = true, int starLevel = 1)
     {
-        if (!GridManager.Instance.TryOccupyNode(node)) 
-            return;
+        if (!GridManager.Instance.TryOccupyNode(node)) return;
 
-        // Создаём GameObject юнита
         GameObject unitGO = new GameObject($"Unit_{data.unitName}");
         Unit unit = unitGO.AddComponent<Unit>();
         unit.Initialize(data, starLevel);
         unit.IsPlayer = isPlayer;
         unit.currentNode = node;
         unit.transform.position = node.worldPosition;
+        unitGO.transform.position = node.worldPosition; // точно в центре!
+        unit.currentNode = node;
+        node.SetOccupied(true);
 
-        // ➕ ДОБАВЛЕН ВИЗУАЛ:
+        // ➕ Визуал: белый квадрат + цвет
         SpriteRenderer sr = unitGO.AddComponent<SpriteRenderer>();
 
-        // Загружаем ваш белый спрайт из Resources
-        Sprite whiteSprite = Resources.Load<Sprite>("UnitSprite");
-        if (whiteSprite != null)
-        {
-            sr.sprite = whiteSprite;
-        }
-        else
-        {
-            Debug.LogError("UnitSprite sprite not found in Assets/Resources/!");
-            // Резервный вариант: используем встроенный спрайт
-            sr.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Default Sprite.psd");
-        }
+        // ✅ Создаём крупный видимый спрайт (размер 1x1 мировой единицы)
+        Texture2D whiteTex = Texture2D.whiteTexture;
+        // Увеличиваем размер текстуры до 100x100 пикселей
+        Sprite whiteSprite = Sprite.Create(
+            whiteTex,
+            new Rect(0, 0, 1, 1), // белый пиксель
+            new Vector2(0.5f, 0.5f), // центральный pivot
+            1.5f // pixelsPerUnit = 1 → спрайт размером 1x1
+        );
+        sr.sprite = whiteSprite;
 
-        // Цвет: игрок — голубой, враг — красный
         sr.color = isPlayer ? Color.cyan : Color.red;
-        sr.sortingOrder = 10; // поверх тайлов
+        sr.sortingOrder = 10;
 
-        // Добавляем в соответствующий список
+        // ➕ Полоска здоровья (для всех юнитов)
+        var healthBar = unitGO.AddComponent<HealthBar>();
+        healthBar.Init(unit.stats.maxHealth);
+
         if (isPlayer)
             playerUnits.Add(unit);
         else
