@@ -10,10 +10,10 @@ public class GridManager : Manager<GridManager>
 {
     public Tilemap grid;
 
-    public Canvas canvas; // ← ДОБАВЛЕНО: ссылка на Canvas
-    public GameObject gridCellPrefab; // ← ДОБАВЛЕНО: префаб клетки UI
 
-    private bool uiGridCreated = false; // ← ДОБАВЛЕНО: флаг, чтобы не создавать дважды
+
+
+
     private Dictionary<Vector3, Node> positionToNode = new Dictionary<Vector3, Node>();
     public List<Node> AllNodes => graph?.nodes;
     public List<Node> GetNeighbors(Node node)
@@ -162,17 +162,5 @@ public class GridManager : Manager<GridManager>
 
         }
     }
-    
-    public void CreateGridUI()
-    {
-        if (uiGridCreated) return;
-        uiGridCreated = true;
 
-        foreach (var node in AllNodes)
-        {
-            var cell = Instantiate(gridCellPrefab, canvas.transform);
-            cell.GetComponent<GridCellDropHandler>().node = node;
-            cell.GetComponent<RectTransform>().position = Camera.main.WorldToScreenPoint(node.worldPosition);
-        }
-    }
 }

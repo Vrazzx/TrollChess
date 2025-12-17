@@ -12,6 +12,7 @@ public class UIManager : Manager<UIManager>
     public int benchSlotCount = 5; // максимум 5 мест
 
     public GameObject shopSlotPrefab;
+    public GameObject highlightCirclePrefab; // ← назначьте в инспекторе
     public GameObject benchUnitPrefab;
 
     public Transform shopPanel;
@@ -63,26 +64,8 @@ public class UIManager : Manager<UIManager>
 
     public void AddUnitToBench(UnitData unit)
     {
-        Debug.Log($"Adding unit to bench: {unit.unitName}");
-
-        if (benchUnitPrefab == null)
-        {
-            Debug.LogError("benchUnitPrefab is not assigned!");
-            return;
-        }
-
-        if (benchPanel == null)
-        {
-            Debug.LogError("benchPanel is not assigned!");
-            return;
-        }
-
-        // ✅ Проверка на лимит
-        if (benchPanel.childCount >= benchSlotCount)
-        {
-            Debug.LogWarning("Bench is full!");
-            return;
-        }
+        if (benchUnitPrefab == null || benchPanel == null) return;
+        if (benchPanel.childCount >= benchSlotCount) return;
 
         GameObject iconGO = Instantiate(benchUnitPrefab, benchPanel);
         Text nameText = iconGO.GetComponentInChildren<Text>();
@@ -91,6 +74,15 @@ public class UIManager : Manager<UIManager>
 
         BenchUnitDragHandler dragHandler = iconGO.AddComponent<BenchUnitDragHandler>();
         dragHandler.unitData = unit;
+        dragHandler.highlightPrefab = highlightCirclePrefab;
+        dragHandler.iconGO = iconGO;
+
+        // ✅ Связываем иконку с юнитом (если он уже существует)
+        var existingUnit = UnitManager.Instance.playerUnits.Find(u => u.data == unit);
+        if (existingUnit != null)
+        {
+            existingUnit.benchIcon = iconGO;
+        }
 
         Debug.Log("Unit added to bench successfully.");
     }
@@ -118,5 +110,25 @@ public class UIManager : Manager<UIManager>
     {
         if (roundText != null)
             roundText.text = round;
+    }
+    public void RefreshBench()
+    {
+        Debug.Log($"🔄 RefreshBench called. Current bench count: {benchPanel.childCount}");
+
+        if (benchPanel == null) return;
+
+        // Очищаем все дочерние объекты
+        for (int i = benchPanel.childCount - 1; i >= 0; i--)
+        {
+            Destroy(benchPanel.GetChild(i).gameObject);
+        }
+
+        Debug.Log($"✅ Bench cleared. Now creating {GameManager.Instance.benchUnits.Count} icons");
+
+        // Создаём заново
+        foreach (var unitData in GameManager.Instance.benchUnits)
+        {
+            AddUnitToBench(unitData);
+        }
     }
 }

@@ -30,7 +30,7 @@ public class GameManager : Manager<GameManager>
     // === Инициализация ===
     void Start()
     {
-        GridManager.Instance.CreateGridUI();
+
         StartPreparation();
     }
 
@@ -70,15 +70,33 @@ public class GameManager : Manager<GameManager>
         currentPhase = GamePhase.Preparation;
         phaseTimer = 0f;
 
-        // ❌ УДАЛИТЬ: UnitManager.Instance.ClearAllUnits();
+        // Возвращаем выживших на исходные позиции
+        foreach (var unit in UnitManager.Instance.playerUnits.ToArray())
+        {
+            if (unit.originalNode != null && !unit.originalNode.IsOccupied)
+            {
+                if (unit.currentNode != null)
+                    unit.currentNode.SetOccupied(false);
 
-        // ✅ Удаляем ТОЛЬКО врагов
+                unit.originalNode.SetOccupied(true);
+                unit.currentNode = unit.originalNode;
+                unit.transform.position = unit.originalNode.worldPosition;
+            }
+            else
+            {
+                UnitManager.Instance.OnUnitDied(unit);
+                GameManager.Instance.benchUnits.Add(unit.data);
+            }
+        }
+
+        // Удаляем врагов
         foreach (var enemy in UnitManager.Instance.enemyUnits.ToArray())
         {
-            UnitManager.Instance.OnUnitDied(enemy); // освобождает узел
+            UnitManager.Instance.OnUnitDied(enemy);
         }
-        
-        // Ваши юниты остаются на поле!
+
+        // ✅ Полное обновление скамейки (только здесь!)
+        UIManager.Instance?.RefreshBench();
 
         RefreshShop();
         SpawnEnemyWave(round);
@@ -94,7 +112,7 @@ public class GameManager : Manager<GameManager>
 
     bool IsCombatFinished()
     {
-        return UnitManager.Instance.playerUnits.Count == 0 || 
+        return UnitManager.Instance.playerUnits.Count == 0 ||
                UnitManager.Instance.enemyUnits.Count == 0;
     }
 
@@ -150,9 +168,9 @@ public class GameManager : Manager<GameManager>
         if (playerGold >= cost)
         {
             playerGold -= cost;
-            benchUnits.Add(unit); // ✅ важно!
+            benchUnits.Add(unit);
             UIManager.Instance?.UpdateGold(playerGold);
-            UIManager.Instance?.AddUnitToBench(unit); // ✅ важно!
+            UIManager.Instance?.AddUnitToBench(unit); // создаст иконку и свяжет с юнитом
             RefreshShop();
         }
     }

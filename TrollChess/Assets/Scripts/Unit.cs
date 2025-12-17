@@ -35,7 +35,10 @@ public class Unit : MonoBehaviour
     public UnitState currentState = UnitState.Idle;
     public Node currentNode;      // где сейчас стоит
     private Node targetNode;      // узел, к которому идёт
-    private bool isMoving = false;  
+    private bool isMoving = false;
+    public Node originalNode; // исходная позиция
+    
+    public GameObject benchIcon; // ссылка на иконку на скамейке  
 
     public float mana = 0f;
     public float maxMana = 100f;
@@ -241,4 +244,3 @@ public enum UnitState
 {
     Idle, Moving, Attacking, Casting, Dead
 }
-
