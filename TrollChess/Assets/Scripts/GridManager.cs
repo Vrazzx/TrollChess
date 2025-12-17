@@ -1,157 +1,118 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.PlayerLoop;
 using UnityEngine.Tilemaps;
 
 public class GridManager : Manager<GridManager>
-{
-    public Tilemap grid;
+{  
+    public GameObject terrainGrid;
 
-
-
-
-
-    private Dictionary<Vector3, Node> positionToNode = new Dictionary<Vector3, Node>();
-    public List<Node> AllNodes => graph?.nodes;
-    public List<Node> GetNeighbors(Node node)
-    {
-        return graph?.Neighbors(node) ?? new List<Node>();
-    }
-
-
-    Graph graph;
-    // Dictionary<Team, int> startPositionsPerTeam;
-
-    // public Node GetFreeNode(Team forTeam)
-    // {
-    //     int startIndex = startPositionsPerTeam[forTeam];
-    //     int currentIndex = startIndex;
-
-    //     while (graph.nodes[currentIndex].IsOccupied)
-    //     {
-    //         if (startIndex == 0)
-    //         {
-    //             currentIndex++;
-    //             if (currentIndex == graph.nodes.Count)
-    //             {
-    //                 return null;
-    //             }
-    //         }
-    //         else
-    //         {
-    //             currentIndex--;
-    //             if (currentIndex == -1)
-    //             {
-    //                 return null;
-    //             }
-    //         }
-    //     }
-
-    //     return graph.nodes[currentIndex];
-    // }
-
-    private void Awake()
+    protected Graph graph;
+    protected Dictionary<Team, int> startPositionPerTeam;
+    
+    List<Tile> allTiles = new List<Tile>();
+    protected void Awake()
     {
         base.Awake();
+        allTiles = terrainGrid.GetComponentsInChildren<Tile>().ToList();
+        
         InitializeGraph();
-        // startPositionsPerTeam = new Dictionary<Team, int>();
-        // startPositionsPerTeam.Add(Team.Team1, 0);
-        // startPositionsPerTeam.Add(Team.Team2, graph.nodes.Count - 1);
-
+        startPositionPerTeam = new Dictionary<Team, int>();
+        startPositionPerTeam.Add(Team.Team1, 0);
+        startPositionPerTeam.Add(Team.Team2, graph.Nodes.Count -1);
     }
 
+    public Node GetFreeNode(Team forTeam)
+    {
+        int startIndex = startPositionPerTeam[forTeam];
+        int currentIndex = startIndex;
+
+        while(graph.Nodes[currentIndex].IsOccupied)
+        {
+            if(startIndex == 0)
+            {
+                currentIndex++;
+                if (currentIndex == graph.Nodes.Count)
+                    return null;
+            }
+            else
+            {
+                currentIndex--;
+                if (currentIndex == -1)
+                    return null;
+            }
+            
+        }
+        return graph.Nodes[currentIndex];
+    }
+
+    public List<Node> GetPath(Node from, Node to)
+    {
+        return graph.GetShortestPath(from, to);
+    }
+
+    public List<Node> GetNodesCloseTo(Node to)
+    {
+        return graph.Neighbors(to);
+    }
+
+    public Node GetNodeForTile(Tile t)
+    {
+        var allNodes = graph.Nodes;
+
+        for (int i = 0; i < allNodes.Count; i++)
+        {
+            if (t.transform.GetSiblingIndex() == allNodes[i].index)
+            {
+                return allNodes[i];
+            }
+        }
+
+        return null;
+    }
+    
     private void InitializeGraph()
     {
         graph = new Graph();
-        positionToNode.Clear();
 
-        for (int x = grid.cellBounds.xMin; x < grid.cellBounds.xMax; x++)
+        for (int i = 0; i < allTiles.Count; i++)
         {
-            for (int y = grid.cellBounds.yMin; y < grid.cellBounds.yMax; y++)
-            {
-                Vector3Int localPos = new Vector3Int(x, y, 0);
-                if (grid.HasTile(localPos))
-                {
-                    Vector3 worldPos = grid.CellToWorld(localPos);
-                    graph.AddNode(worldPos);
-                    // Кэшируем позицию → узел для быстрого поиска
-                    positionToNode[worldPos] = graph.nodes[graph.nodes.Count - 1];
-                }
-            }
+            Vector3 place = allTiles[i].transform.position;
+            graph.AddNode(place);
         }
 
-        // Создаём связи между соседями (гекс-сетка: до 6 соседей)
-        foreach (Node node in graph.nodes)
+        var allNodes = graph.Nodes;
+        foreach (Node from in allNodes)
         {
-            foreach (Node other in graph.nodes)
+            foreach (Node to in allNodes)
             {
-                if (node != other && Vector3.Distance(node.worldPosition, other.worldPosition) < 1.1f)
+                if (Vector3.Distance(from.worldPosition, to.worldPosition) < 1f && from != to)
                 {
-                    graph.AddEdge(node, other);
+                    graph.AddEdge(from, to);
                 }
             }
         }
     }
 
-    /// <summary>
-    /// Возвращает узел по мировой позиции (с точностью до 0.01f)
-    /// </summary>
-    public Node GetNodeAtPosition(Vector3 worldPosition)
-    {
-        foreach (var kvp in positionToNode)
-        {
-            if (Vector3.Distance(kvp.Key, worldPosition) < 0.01f)
-                return kvp.Value;
-        }
-        return null;
-    }
+    public int fromIndex = 0;
+    public int toIndex = 0;
 
-    /// <summary>
-    /// Освобождает узел (используется при смерти юнита или удалении)
-    /// </summary>
-    public void ReleaseNode(Node node)
-    {
-        if (node != null)
-            node.SetOccupied(false);
-    }
-
-    /// <summary>
-    /// Пытается занять узел для юнита
-    /// </summary>
-    public bool TryOccupyNode(Node node)
-    {
-        if (node == null || node.IsOccupied) return false;
-        node.SetOccupied(true);
-        return true;
-    }
-
-    /// <summary>
-    /// Проверяет, принадлежит ли узел нижней (дружественной) половине доски
-    /// </summary>
-    public bool IsNodeInPlayerZone(Node node)
-    {
-        if (graph.nodes.Count == 0) return false;
-        float midY = (graph.nodes[0].worldPosition.y + graph.nodes[^1].worldPosition.y) / 2f;
-        return node.worldPosition.y <= midY;
-    }
     private void OnDrawGizmos()
     {
         if (graph == null)
             return;
 
-        var allEdges = graph.edges;
+        var allEdges = graph.Edges;
         if (allEdges == null)
             return;
 
-        foreach (Edge e in allEdges)
+        foreach(Edge e in allEdges)
         {
             Debug.DrawLine(e.from.worldPosition, e.to.worldPosition, Color.black, 100);
         }
 
-        var allNodes = graph.nodes;
+        var allNodes = graph.Nodes;
         if (allNodes == null)
             return;
 
@@ -159,8 +120,19 @@ public class GridManager : Manager<GridManager>
         {
             Gizmos.color = n.IsOccupied ? Color.red : Color.green;
             Gizmos.DrawSphere(n.worldPosition, 0.1f);
+            
+        }
 
+        if (fromIndex >= allNodes.Count || toIndex >= allNodes.Count)
+            return;
+
+        List<Node> path = graph.GetShortestPath(allNodes[fromIndex], allNodes[toIndex]);
+        if (path.Count > 1)
+        {
+            for (int i = 1; i < path.Count; i++)
+            {
+                Debug.DrawLine(path[i - 1].worldPosition, path[i].worldPosition, Color.red, 10);
+            }
         }
     }
-
 }
